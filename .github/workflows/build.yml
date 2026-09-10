@@ -47,7 +47,8 @@ jobs:
           ~/.buildozer/android/packages
           ~/.gradle
         key: buildozer-packages-v7
-        restore-keys: buildozer-packages-v7
+        restore-keys: |
+          buildozer-packages-v7
 
     - name: Verify buildozer.spec exists
       run: |
