@@ -37,6 +37,22 @@ jobs:
         sudo apt install -y -qq pkg-config cmake unzip zip
         pip install buildozer cython
     
+    - name: Accept Android SDK licenses
+      run: |
+        mkdir -p ~/.buildozer/android/platform/android-sdk/licenses
+        echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
+        echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
+        echo "8933bad161af4178b1185d1a37fbf41ea5269c55" >> ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
+        echo "84831b9409646a918e30573bab4c9c91346d8abd" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
+        echo "d975f751698a77b662f1254ddbeed3901e976f5a" > ~/.buildozer/android/platform/android-sdk/licenses/intel-android-extra-license
+        echo "33b6a2b64607f11b759f320ef9dff4ae5c47d97a" > ~/.buildozer/android/platform/android-sdk/licenses/google-gdk-license
+        echo "601085b94cd77f0b54ff86406957099ebe79c4d6" > ~/.buildozer/android/platform/android-sdk/licenses/mips-android-sysimage-license
+        echo "859f317696f67ef3d7f30a50a5560e7834b43903" > ~/.buildozer/android/platform/android-sdk/licenses/android-googletv-license
+        echo "e9b20e7a1a1c2b5ea2e5c1b0e5c1b0e5c1b0e5c1" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-arm-dbt-license
+        echo "859f317696f67ef3d7f30a50a5560e7834b43903" > ~/.buildozer/android/platform/android-sdk/licenses/android-googlexr-license
+        echo "Лицензии приняты!"
+        ls -la ~/.buildozer/android/platform/android-sdk/licenses/
+    
     - name: Create buildozer.spec
       run: |
         cat > buildozer.spec << 'EOF'
@@ -55,6 +71,7 @@ jobs:
         android.minapi = 21
         android.arch = arm64-v8a
         android.allow_backup = True
+        android.accept_sdk_license = True
         
         [buildozer]
         log_level = 2
@@ -62,7 +79,8 @@ jobs:
         EOF
     
     - name: Build APK
-      run: buildozer android debug
+      run: |
+        yes | buildozer android debug || buildozer android debug
     
     - name: Upload APK
       uses: actions/upload-artifact@v4
