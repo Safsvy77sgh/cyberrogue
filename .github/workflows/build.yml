@@ -8,7 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
     - uses: actions/checkout@v4
@@ -18,26 +18,28 @@ jobs:
       with:
         python-version: '3.11'
 
-    # ГЛАВНОЕ ИСПРАВЛЕНИЕ: Java 17 вместо 11
     - name: Set up Java 17
       uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
         java-version: '17'
 
-    - name: Verify Java version
-      run: |
-        java -version
-        echo "JAVA_HOME=$JAVA_HOME"
-
-    - name: Install dependencies
+    - name: Install system dependencies
       run: |
         sudo apt update -qq
         sudo apt install -y -qq python3-pip python3-dev build-essential git
         sudo apt install -y -qq libffi-dev libssl-dev zlib1g-dev
         sudo apt install -y -qq libncurses5-dev libncursesw5-dev autoconf automake libtool
         sudo apt install -y -qq pkg-config cmake unzip zip wget
-        pip install buildozer cython
+        # ВАЖНО: старый cython (pygame-ce не собирается с cython 3.x)
+        pip install "cython<3.0" buildozer
+
+    - name: Install Gradle 8.0.2
+      run: |
+        wget -q https://services.gradle.org/distributions/gradle-8.0.2-bin.zip
+        sudo unzip -q gradle-8.0.2-bin.zip -d /opt/
+        sudo ln -sfn /opt/gradle-8.0.2 /opt/gradle
+        echo "/opt/gradle/bin" >> $GITHUB_PATH
 
     - name: Cache Buildozer packages
       uses: actions/cache@v4
@@ -45,10 +47,10 @@ jobs:
         path: |
           ~/.buildozer/android/packages
           ~/.gradle
-        key: buildozer-packages-v4
-        restore-keys: |
-          buildozer-packages-v4
+        key: buildozer-packages-v7
+        restore-keys: buildozer-packages-v7
 
+    # ГЛАВНОЕ: создаём buildozer.spec (в её версии этого НЕ БЫЛО)
     - name: Create buildozer.spec
       run: |
         cat > buildozer.spec << 'EOF'
@@ -67,7 +69,6 @@ jobs:
         android.minapi = 21
         android.ndk_api = 21
         android.archs = arm64-v8a
-        android.ndk = 25b
         android.allow_backup = True
         android.accept_sdk_license = True
         android.log_level = 2
@@ -77,40 +78,8 @@ jobs:
         warn_on_root = 1
         EOF
 
-    - name: Setup Android SDK cmdline-tools and licenses
-      run: |
-        set -e
-        SDK_DIR=$HOME/.buildozer/android/platform/android-sdk
-        mkdir -p $SDK_DIR/cmdline-tools $SDK_DIR/tools/bin $SDK_DIR/licenses
-
-        # Проверяем Java (должна быть 17)
-        java -version
-
-        # Скачиваем cmdline-tools если их нет
-        if [ ! -f $SDK_DIR/cmdline-tools/latest/bin/sdkmanager ]; then
-          cd /tmp
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline.zip
-          unzip -q -o cmdline.zip -d $SDK_DIR/cmdline-tools
-          rm -rf $SDK_DIR/cmdline-tools/latest
-          mv $SDK_DIR/cmdline-tools/cmdline-tools $SDK_DIR/cmdline-tools/latest
-        fi
-
-        # Симлинки для старых версий buildozer
-        ln -sf $SDK_DIR/cmdline-tools/latest/bin/sdkmanager $SDK_DIR/tools/bin/sdkmanager
-        ln -sf $SDK_DIR/cmdline-tools/latest/bin/avdmanager $SDK_DIR/tools/bin/avdmanager
-
-        # Принимаем лицензии (printf надёжнее yes)
-        printf 'y\ny\ny\ny\ny\ny\ny\ny\ny\ny\n' | \
-          $SDK_DIR/cmdline-tools/latest/bin/sdkmanager --sdk_root=$SDK_DIR --licenses || true
-
-        # Устанавливаем build-tools и platform
-        $SDK_DIR/cmdline-tools/latest/bin/sdkmanager --sdk_root=$SDK_DIR \
-          "platform-tools" "platforms;android-30" "build-tools;30.0.3" || true
-
-        echo "=== SDK готов ==="
-        ls -la $SDK_DIR/tools/bin/
-        ls -la $SDK_DIR/
-
+    # Принимаем лицензии после того, как buildozer скачает cmdline-tools
+    # (в её версии был вызов sdkmanager, но его ещё нет в PATH)
     - name: Build APK
       run: |
         set -o pipefail
