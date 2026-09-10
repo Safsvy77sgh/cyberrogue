@@ -8,7 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    timeout-minutes: 45  # ← BUG FIX #7: защита от зависания
+    timeout-minutes: 45
 
     steps:
     - uses: actions/checkout@v4
@@ -18,25 +18,36 @@ jobs:
       with:
         python-version: '3.11'
 
+    # ГЛАВНОЕ ИСПРАВЛЕНИЕ: Java 17 вместо 11
+    - name: Set up Java 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+
+    - name: Verify Java version
+      run: |
+        java -version
+        echo "JAVA_HOME=$JAVA_HOME"
+
     - name: Install dependencies
       run: |
         sudo apt update -qq
         sudo apt install -y -qq python3-pip python3-dev build-essential git
-        sudo apt install -y -qq libffi-dev libssl-dev openjdk-17-jdk zlib1g-dev
+        sudo apt install -y -qq libffi-dev libssl-dev zlib1g-dev
         sudo apt install -y -qq libncurses5-dev libncursesw5-dev autoconf automake libtool
         sudo apt install -y -qq pkg-config cmake unzip zip wget
         pip install buildozer cython
 
-    # BUG FIX #1 + #5: кэшируем ТОЛЬКО то, что не ломается
     - name: Cache Buildozer packages
       uses: actions/cache@v4
       with:
         path: |
           ~/.buildozer/android/packages
           ~/.gradle
-        key: buildozer-packages-v3
+        key: buildozer-packages-v4
         restore-keys: |
-          buildozer-packages-v3
+          buildozer-packages-v4
 
     - name: Create buildozer.spec
       run: |
@@ -66,15 +77,16 @@ jobs:
         warn_on_root = 1
         EOF
 
-    # BUG FIX #1 + #4: ставим cmdline-tools и принимаем лицензии
-    # ПОСЛЕ cache, но ДО buildozer. Используем printf вместо yes.
-    - name: Setup Android SDK licenses
+    - name: Setup Android SDK cmdline-tools and licenses
       run: |
         set -e
         SDK_DIR=$HOME/.buildozer/android/platform/android-sdk
         mkdir -p $SDK_DIR/cmdline-tools $SDK_DIR/tools/bin $SDK_DIR/licenses
 
-        # Скачиваем cmdline-tools если их ещё нет
+        # Проверяем Java (должна быть 17)
+        java -version
+
+        # Скачиваем cmdline-tools если их нет
         if [ ! -f $SDK_DIR/cmdline-tools/latest/bin/sdkmanager ]; then
           cd /tmp
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline.zip
@@ -91,11 +103,15 @@ jobs:
         printf 'y\ny\ny\ny\ny\ny\ny\ny\ny\ny\n' | \
           $SDK_DIR/cmdline-tools/latest/bin/sdkmanager --sdk_root=$SDK_DIR --licenses || true
 
-        echo "SDK подготовлен:"
+        # Устанавливаем build-tools и platform
+        $SDK_DIR/cmdline-tools/latest/bin/sdkmanager --sdk_root=$SDK_DIR \
+          "platform-tools" "platforms;android-30" "build-tools;30.0.3" || true
+
+        echo "=== SDK готов ==="
         ls -la $SDK_DIR/tools/bin/
+        ls -la $SDK_DIR/
 
     - name: Build APK
-      id: build
       run: |
         set -o pipefail
         buildozer android debug 2>&1 | tee build.log
@@ -110,7 +126,6 @@ jobs:
         retention-days: 30
         if-no-files-found: error
 
-    # BUG FIX #6: если build.log нет — не падаем с новой ошибкой
     - name: Upload logs on failure
       if: failure()
       uses: actions/upload-artifact@v4
