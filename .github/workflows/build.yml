@@ -31,7 +31,6 @@ jobs:
         sudo apt install -y -qq libffi-dev libssl-dev zlib1g-dev
         sudo apt install -y -qq libncurses5-dev libncursesw5-dev autoconf automake libtool
         sudo apt install -y -qq pkg-config cmake unzip zip wget
-        # ВАЖНО: старый cython (pygame-ce не собирается с cython 3.x)
         pip install "cython<3.0" buildozer
 
     - name: Install Gradle 8.0.2
@@ -50,36 +49,12 @@ jobs:
         key: buildozer-packages-v7
         restore-keys: buildozer-packages-v7
 
-    # ГЛАВНОЕ: создаём buildozer.spec (в её версии этого НЕ БЫЛО)
-    - name: Create buildozer.spec
+    - name: Verify buildozer.spec exists
       run: |
-        cat > buildozer.spec << 'EOF'
-        [app]
-        title = Перегрузка: Последний Протокол
-        package.name = cyberrogue
-        package.domain = org.cyberrogue
-        source.dir = .
-        source.include_exts = py,png,jpg,jpeg,json,ttf,otf
-        version = 1.0.0
-        requirements = python3,pygame-ce
-        orientation = portrait
-        fullscreen = 1
-        android.permissions = INTERNET, VIBRATE
-        android.api = 30
-        android.minapi = 21
-        android.ndk_api = 21
-        android.archs = arm64-v8a
-        android.allow_backup = True
-        android.accept_sdk_license = True
-        android.log_level = 2
+        ls -la buildozer.spec
+        echo "=== Содержимое buildozer.spec ==="
+        cat buildozer.spec
 
-        [buildozer]
-        log_level = 2
-        warn_on_root = 1
-        EOF
-
-    # Принимаем лицензии после того, как buildozer скачает cmdline-tools
-    # (в её версии был вызов sdkmanager, но его ещё нет в PATH)
     - name: Build APK
       run: |
         set -o pipefail
